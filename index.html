@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Stationnements vélos à Paris - OSM</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.4/dist/leaflet.css" integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA==" crossorigin=""/>
+    <style>
+        body, html { height: 100%; overflow: hidden; }
+        body { margin: 0; }
+        p { line-height: 1.1em; margin-top: 1em; margin-bottom: 1em; text-align: center; }
+        #mapwrapper { height: calc(100vh - 3.1em); }
+        #mapid { height: 100%; }
+    </style>
+</head>
+<body>
+    <p id="loading">Chargement...</p>
+    <div id="mapwrapper">
+        <div id="mapid"></div>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.3.4/dist/leaflet.js"
+            integrity="sha512-nMMmRyTVoLYqjP9hrbed9S+FzjZHW5gY1TWCHA5ckwXZBadntCNs8kEqAWdrb9O7rxbCaA4lKTIWjDXZxflOcA=="
+            crossorigin=""></script>
+    <script src="https://cdn.polyfill.io/v2/polyfill.min.js"></script>
+    <script>
+        var mymap = L.map('mapid').setView([48.8548265, 2.3450563], 13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {
+            attribution: 'Données de la carte &copy; contributeurs <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+        }).addTo(mymap);
+
+        fetch('https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D%5Btimeout%3A25%5D%3Barea%283600037026%29%2D%3E%2EsearchAreaMontrouge%3Barea%283600007444%29%2D%3E%2EsearchAreaParis%3B%28node%5B%22amenity%22%3D%22bicycle%5Fparking%22%5D%28area%2EsearchAreaMontrouge%29%3Bway%5B%22amenity%22%3D%22bicycle%5Fparking%22%5D%28area%2EsearchAreaMontrouge%29%3Brelation%5B%22amenity%22%3D%22bicycle%5Fparking%22%5D%28area%2EsearchAreaMontrouge%29%3Bnode%5B%22amenity%22%3D%22bicycle%5Fparking%22%5D%28area%2EsearchAreaParis%29%3Bway%5B%22amenity%22%3D%22bicycle%5Fparking%22%5D%28area%2EsearchAreaParis%29%3Brelation%5B%22amenity%22%3D%22bicycle%5Fparking%22%5D%28area%2EsearchArea1Paris%29%3B%29%3Bout%3B%3E%3Bout%20skel%20qt%3B%0A')
+            .then(response => response.json())
+            .then(response => response.elements)
+            .then((response) => {
+                var nodesPartsOfWays = [];
+                response.forEach((item) => {
+                    if (item.type === 'way') {
+                        nodesPartsOfWays = Array.concat(
+                            nodesPartsOfWays,
+                            item.nodes
+                        );
+                    }
+                });
+
+                var knownCapacityNumber = 0;
+                var unknownCapacityNumber = 0;
+                var totalCapacity = 0;
+
+                response.map((item) => {
+                    if (item.tags && item.tags.capacity) {
+                        // Known capacity
+                        knownCapacityNumber += 1;
+                        totalCapacity += parseInt(item.tags.capacity);
+                        return;
+                    }
+
+                    if (item.type === 'node' && nodesPartsOfWays.indexOf(item.id) > -1) {
+                        // Node is part of a way, ignore
+                        return;
+                    }
+
+                    unknownCapacityNumber += 1;
+
+                    if (item.lat && item.lon) {
+                        var marker = L.marker([item.lat, item.lon]).addTo(mymap);
+                        marker.bindPopup('<a href="http://openstreetmap.org/' + item['type'] + '/' + item['id'] + '">http://openstreetmap.org/' + item['type'] + '/' + item['id'] + '</a>');
+                    } else {
+                        console.warn('Unexpected item without lat/lon: ' + JSON.stringify(item));
+                    }
+                });
+
+                document.getElementById('loading').textContent = 'Nombre de stationnements avec capacité connue : ' + knownCapacityNumber + ', Nombre de stationnements sans capacité connue : ' + unknownCapacityNumber + ', Nombre total de places vélos connues : ' + totalCapacity + '.';
+            });
+    </script>
+</body>
+</html>
